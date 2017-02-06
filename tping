@@ -45,15 +45,32 @@ function removeArgumentsGap($str)
 function parseCommandLineArgs()
 {
     global $argv;
-    $args = array();
+    $args = [
+        // ls
+        // ls /usr
+        'arguments' => [],
+        // -user root
+        'options' => [],
+        // --help
+    ];
+    $options = array();
+    $arguments = array();
     for ($i = 0; $i < count($argv); $i++) {
+
         if (isArguments($argv[$i])) {
-            $args[removeArgumentsGap($argv[$i])] = [];
-            $lastArr = &$args[removeArgumentsGap($argv[$i])];
+
+            if($i !== count($argv)-1 && !isArguments($argv[$i+1])){
+                $options[removeArgumentsGap($argv[$i])] = $argv[++$i];
+            }else{
+                $options[removeArgumentsGap($argv[$i])] = null;
+            }
+            continue;
         } else {
-            $lastArr[] = $argv[$i];
+            $arguments[] = $argv[$i];
         }
     }
+    $args['arguments'] = $arguments;
+    $args['options'] = $options;
     return $args;
 }
 
@@ -61,55 +78,104 @@ array_shift($argv);
 
 $args = parseCommandLineArgs();
 
-function config($key, $default = null)
-{
-    global $args;
-    if (!key_exists($key, $args)) {
-        return $default;
-    } else {
-        $value = $args[$key];
-        if ($value) {
-            if (count($value) == 1) {
-                // string
-                return $value[0];
-            } else {
-                // array
-                return $value;
-            }
-        } elseif (is_array($value)) {
-            // bool
-            return true;
-        }
-    }
-}
+//var_dump($args);exit;
+//function config($key, $default = null)
+//{
+//    global $args;
+//    if (!key_exists($key, $args)) {
+//        return $default;
+//    } else {
+//        $value = $args[$key];
+//        if ($value) {
+//            if (count($value) == 1) {
+//                // string
+//                return $value[0];
+//            } else {
+//                // array
+//                return $value;
+//            }
+//        } elseif (is_array($value)) {
+//            // bool
+//            return true;
+//        }
+//    }
+//}
+//;
 
-//var_dump($args);
-
-$c = 4;
+$address = $args['arguments'][0]?$args['arguments'][0]:'';
 $EOL = PHP_EOL;
+
+if(strpos($address,':')){
+    list($host, $port) = explode(':', $address);
+    if(!is_numeric($port)){
+        throw new InvalidArgumentException("port $port is invalid");
+    }
+}else{
+    $host = $address;
+    $port = 80;
+}
+function host2ip($host)
+{
+    $host=trim($host.'.'); // clean and add root .
+    $ip= gethostbyname($host);
+    if($ip==$host) $ip='';// empty IP if there is no ip
+    return $ip;
+}
+echo "DNS查询...{$EOL}";
+$start = microtime(true);
+
+$ip = host2ip($host);
+
+if (!$ip){
+    echo "域名解析失败: {$host}{$EOL}";
+    exit(1);
+}
+$latency = microtime(true) - $start;
+$latency = round($latency * 1000);
+
+echo "域名: {$host} => {$ip} 解析耗时: {$latency}ms{$EOL}";
+
+$address = $ip.':'.$port;
+
+$t = key_exists('t', $args['options']);
+
+$i = 0;
+
+$n = key_exists('n', $args['options'])?$args['options']['n']:4;
 $success = 0;
 $fail = 0;
 $latencys = array();
-for ($i = 0; $i < $c; $i++) {
-    $latency = pingFsockopen(config('h'), config('p'));
+
+
+
+echo "TCP连接测试...{$EOL}";
+while ($t || $i < $n){
+
+    $latency = pingFsockopen($ip, $port);
     if ($latency === false) {
         $fail++;
         $str = "无法建立连接{$EOL}";
     }else{
         $success++;
         $latencys[] = $latency;
-        $str = "对 ".config('h')." 进行的TCP连接测试: 时间={$latency}ms{$EOL}";
+        $str = "对 {$address} 进行的TCP连接测试: 时间={$latency}ms{$EOL}";
     }
     echo $str;
 
+    $i++;
+
     // 等待网络恢复
-    sleep(1);
+    usleep(500 * 1000);
 }
+
 echo $EOL;
-$loss = ($fail/$c) * 100;
-echo config('h')." 的 TCP 连接测试统计信息:" . " 数据包:{$EOL}    已发送 = {$c}，已接收 = {$success}，丢失 = {$fail} ({$loss}% 丢失){$EOL}";
+$loss = round(($fail/$i) * 100,2);
+
+echo "$address 的 TCP 连接测试统计信息:" . " 数据包:{$EOL}    已发送 = {$i}，已接收 = {$success}，丢失 = {$fail} ({$loss}% 丢失){$EOL}";
 
 sort($latencys);
 $pre = array_sum($latencys) / count($latencys);
-echo "往返行程的估计时间(以毫秒为单位):{$EOL}    最短 = ".end($latencys)."ms，最长 = ".reset($latencys)."ms，平均 = {$pre}ms{$EOL}";
+echo "TCP连接的时间(以毫秒为单位):{$EOL}    最短 = ".end($latencys)."ms，最长 = ".reset($latencys)."ms，平均 = {$pre}ms{$EOL}";
 echo $EOL;
+
+$quit_done = true;
