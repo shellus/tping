@@ -1,0 +1,12 @@
+{
+    "name": "shellus/tping",
+    "description": "tcp ping tool",
+    "type": "library",
+    "authors": [
+        {
+            "name": "shellus",
+            "email": "shellus@endaosi.com"
+        }
+    ],
+    "require": {}
+}
