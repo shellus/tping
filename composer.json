@@ -8,5 +8,8 @@
             "email": "shellus@endaosi.com"
         }
     ],
-    "require": {}
+    "require": {},
+    "bin":[
+        "tping"
+    ]
 }
